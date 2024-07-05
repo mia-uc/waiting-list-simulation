@@ -14,6 +14,7 @@ class Client:
         self.requirement = None
         self.waiting_room_arrive_time = None
         self.ticker = None
+        self.attention_start_time = None
         self.price = None
         self.leave_time = None
         self.leakage_time = None
@@ -27,6 +28,7 @@ class Client:
             "requirement": self.requirement,
             "waiting_room_arrive_time": self.waiting_room_arrive_time,
             "ticker": self.ticker,
+            "attention_start_time": self.attention_start_time,
             "price": self.price,
             "leave_time": self.leave_time,
             "leakage_time": self.leakage_time,

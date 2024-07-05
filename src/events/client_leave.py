@@ -12,8 +12,10 @@ class ClientLeave(Event):
     @staticmethod
     def generate(time: float, client: Client, **kwargs):
         delay = ClientRandomVar.get_attention(client.type, client.requirement)
+
         client.price = ClientRandomVar.get_price(
             client.type, client.requirement
         )
+        client.attention_start_time = time
 
         return ClientLeave(time + delay, client, **kwargs)
