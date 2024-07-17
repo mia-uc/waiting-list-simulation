@@ -1,9 +1,15 @@
-from events.base import Event
-from entities.client import Client, ClientType
-from random_vars import client as ClientRandomVar
+try:
+    from events.base import Event
+    from entities.client import Client, ClientType
+    from random_vars import client as ClientRandomVar
+except ModuleNotFoundError:
+    from src.events.base import Event
+    from src.entities.client import Client, ClientType
+    from src.random_vars import client as ClientRandomVar
 
 
 class ClientArriveEvent(Event):
+    ClientClass = Client
 
     def __init__(self, time: float, client: Client, **kwargs):
         super().__init__(time, **kwargs)
@@ -31,6 +37,6 @@ class ClientArriveEvent(Event):
 
         return ClientArriveEvent(
             time=time + delay,
-            client=Client(client_type, time + delay),
+            client=ClientArriveEvent.ClientClass(client_type, time + delay),
             **kwargs
         )

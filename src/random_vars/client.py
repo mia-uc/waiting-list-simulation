@@ -1,14 +1,24 @@
 import numpy as np
 import random
 
-from random_vars.base import ExponentialRandomVar
-from random_vars.base import MultiModalRandomVar
-from random_vars.base import ConstantRandomVar
-from random_vars.base import UniformRandomVar
-from random_vars.base import LogNormRandomVar
-from random_vars.base import GeometricRandomVar
+try:
+    from random_vars.base import ExponentialRandomVar
+    from random_vars.base import MultiModalRandomVar
+    from random_vars.base import ConstantRandomVar
+    from random_vars.base import UniformRandomVar
+    from random_vars.base import LogNormRandomVar
+    from random_vars.base import GeometricRandomVar
 
-from entities.client import ClientType, Client
+    from entities.client import ClientType, Client
+except ModuleNotFoundError:
+    from src.random_vars.base import ExponentialRandomVar
+    from src.random_vars.base import MultiModalRandomVar
+    from src.random_vars.base import ConstantRandomVar
+    from src.random_vars.base import UniformRandomVar
+    from src.random_vars.base import LogNormRandomVar
+    from src.random_vars.base import GeometricRandomVar
+
+    from src.entities.client import ClientType, Client
 
 
 class A:

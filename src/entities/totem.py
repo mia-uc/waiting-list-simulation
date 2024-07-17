@@ -1,5 +1,8 @@
-from entities.client import ClientType
 from collections import defaultdict
+try:
+    from entities.client import ClientType
+except ModuleNotFoundError:
+    from src.entities.client import ClientType
 
 
 class TotemStatus:

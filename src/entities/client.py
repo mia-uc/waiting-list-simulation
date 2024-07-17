@@ -41,23 +41,53 @@ class Client:
 
         return f"{self.type}-{self.arrive_time}"
 
+    # def __lt__(self, other):
+    #     if not other:
+    #         return True
+
+    #     if self.type == other.type:
+    #         return self.arrive_time < other.arrive_time
+
+    #     return self.type.value < other.type.value
+
+    # def __gt__(self, other):
+    #     if not other:
+    #         return False
+
+    #     if self.client_type == other.client_type:
+    #         return self.arrive_time > other.arrive_time
+
+    #     return self.client_type.value > other.client_type.value
+
     def __lt__(self, other):
         if not other:
             return True
 
-        if self.type == other.type:
-            return self.arrive_time < other.arrive_time
+        if self.requirement == 1 and other.requirement in [2, 3]:
+            return True
 
-        return self.type.value < other.type.value
+        elif self.requirement == 3 and other.requirement == 2:
+            return True
+
+        elif self.requirement != 1 and other.requirement == 1:
+            return False
+
+        return self.arrive_time < other.arrive_time
 
     def __gt__(self, other):
         if not other:
             return False
 
-        if self.client_type == other.client_type:
-            return self.arrive_time > other.arrive_time
+        if self.requirement == 1 and other.requirement in [2, 3]:
+            return False
 
-        return self.client_type.value > other.client_type.value
+        elif self.requirement == 3 and other.requirement == 2:
+            return False
+
+        elif self.requirement != 1 and other.requirement == 1:
+            return True
+
+        return self.arrive_time > other.arrive_time
 
     def __str__(self):
         if self.type == ClientType.A:

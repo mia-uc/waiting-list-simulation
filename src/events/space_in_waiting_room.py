@@ -1,4 +1,7 @@
-from events.base import Event
+try:
+    from events.base import Event
+except ModuleNotFoundError:
+    from src.events.base import Event
 
 
 class FeeSpaceInWaitingRoomEvent(Event):

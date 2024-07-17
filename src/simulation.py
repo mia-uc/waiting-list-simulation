@@ -1,22 +1,38 @@
 import time
 import os
 import argparse
+import pandas as pd
 
 from functools import singledispatchmethod
 
-from random_vars import client as ClientRandomVar
-from utils.formatter import formatear_moneda
+try:
+    from random_vars import client as ClientRandomVar
+    from utils.formatter import formatear_moneda
 
-from events.client_arrive import ClientArriveEvent
-from events.client_leave_totem import ClientLeaveTotemEvent
-from events.worker_return_to_work import WorkerReturnToWork
-from events.space_in_waiting_room import FeeSpaceInWaitingRoomEvent
-from events.client_leave import ClientLeave
+    from events.client_arrive import ClientArriveEvent
+    from events.client_leave_totem import ClientLeaveTotemEvent
+    from events.worker_return_to_work import WorkerReturnToWork
+    from events.space_in_waiting_room import FeeSpaceInWaitingRoomEvent
+    from events.client_leave import ClientLeave
 
-from entities.totem import Totem, TotemStatus
-from entities.client import ClientType, Client
-from entities.workers import Worker, WorkerStatus
-from entities.workers import Seller, SellerAndClientSupport, ClientSupport
+    from entities.totem import Totem, TotemStatus
+    from entities.client import ClientType, Client
+    from entities.workers import Worker, WorkerStatus
+    from entities.workers import Seller, SellerAndClientSupport, ClientSupport
+except ModuleNotFoundError:
+    from src.random_vars import client as ClientRandomVar
+    from src.utils.formatter import formatear_moneda
+
+    from src.events.client_arrive import ClientArriveEvent
+    from src.events.client_leave_totem import ClientLeaveTotemEvent
+    from src.events.worker_return_to_work import WorkerReturnToWork
+    from src.events.space_in_waiting_room import FeeSpaceInWaitingRoomEvent
+    from src.events.client_leave import ClientLeave
+
+    from src.entities.totem import Totem, TotemStatus
+    from src.entities.client import ClientType, Client
+    from src.entities.workers import Worker, WorkerStatus
+    from src.entities.workers import Seller, SellerAndClientSupport, ClientSupport
 
 
 class Simulation:
@@ -39,7 +55,6 @@ class Simulation:
         # Simulation Queues
         self.waiting_room: set[Client] = set()
         self.totem_waiting_list: list[Client] = []
-        self.monitor_client_list = [None] * 2 * len(workers)
 
         # Simulation Event Tools
         self.events = []
@@ -63,9 +78,18 @@ class Simulation:
             assert client.ticker is not None
             assert client.requirement is not None
 
-        for worker_index in range(len(self.workers)):
-            assert self.monitor_client_list[worker_index] or \
-                not self.monitor_client_list[worker_index + len(self.workers)]
+        clients = []
+        for worker in self.workers:
+            assert worker.queue[0] or \
+                all(
+                    worker.queue[i] is None
+                    for i in range(1, len(worker.queue))
+            )
+
+            clients.extend(worker.queue)
+
+        clients = [c for c in clients if c is not None]
+        assert len(clients) == len(set(clients)), (clients, set(clients))
 
         totem_events = [
             e for e in self.events if isinstance(e, ClientLeaveTotemEvent)
@@ -97,7 +121,7 @@ class Simulation:
 
         return self
 
-    def run(self, delay=None, verbose=False):
+    def run(self, delay=None, verbose=False, testing=False):
         while len(self.events) != 0:
             self.events.sort()
             event = self.events.pop(0)
@@ -109,16 +133,17 @@ class Simulation:
             self.clock = event.time
             self.run_event(event)
             if verbose:
-                output = (
-                    f"Clock: {self.clock} --> {event}\n"
-                    f"Waiting Room ({len(self.waiting_room)}/{self.waiting_room_size}): {[str(client) for client in self.waiting_room]}\n"
-                    f"Totem Waiting Room ({len(self.totem_waiting_list)}): {'I'* len(self.totem_waiting_list)}\n"
-                    f"Monitor Client List: {[str(client) if client else 'Empty' for client in self.monitor_client_list]}\n"
-                    f"Events Queue: {[str(event) for event in self.events]}\n"
-                    "---------------------------------------------------------------------------------------------------------",
-                )
+                output = f"Clock: {self.clock} --> {event}\n"
+                output += f"Waiting Room ({len(self.waiting_room)}/{self.waiting_room_size}): {[str(client) for client in self.waiting_room]}\n"
+                output += f"Totem Waiting Room ({len(self.totem_waiting_list)}): {'I'* len(self.totem_waiting_list)}\n"
+                output += ''.join([
+                    f"Monitor Worker({i}): {[str(client) if client else 'Empty' for client in worker.queue]}\n"
+                    for i, worker in enumerate(self.workers)
+                ])
+                output += f"Events Queue: {[str(event) for event in self.events]}\n"
+                output += "---------------------------------------------------------------------------------------------------------"
 
-                print(*output)
+                print(output)
                 # if delay is not None:
                 #     time.sleep(delay)
                 #     print("\033[F" * (10), end='')
@@ -134,7 +159,11 @@ class Simulation:
 
             self.passive_event(self.totem)
 
-            self.test_rules()
+            if testing:
+                self.test_rules()
+
+        if verbose:
+            print(output)
 
         return self
 
@@ -174,24 +203,18 @@ class Simulation:
 
     @run_event.register
     def _(self, event: ClientLeave):
-        worker_index = event.worker_index
+        worker = event.worker
         event.client.leave_time = self.clock
-        event.client.worker_helper = worker_index
+        event.client.worker_helper = self.workers.index(worker)
 
-        self.monitor_client_list[worker_index] = \
-            self.monitor_client_list[worker_index + len(self.workers)]
-        self.monitor_client_list[worker_index + len(self.workers)] = None
+        worker.free()
 
-        if self.workers[worker_index].go_to_launch(self.clock):
-            self.dispatch(WorkerReturnToWork, worker_index)
+        if worker.go_to_launch(self.clock):
+            self.dispatch(WorkerReturnToWork, worker)
             return
 
-        if self.monitor_client_list[worker_index] is not None:
-            self.dispatch(
-                ClientLeave,
-                self.monitor_client_list[worker_index],
-                worker_index=worker_index
-            )
+        if (next_client := worker.next()):
+            self.dispatch(ClientLeave, next_client, worker=worker)
 
     @run_event.register
     def _(self, event: FeeSpaceInWaitingRoomEvent):
@@ -200,14 +223,10 @@ class Simulation:
 
     @run_event.register
     def _(self, event: WorkerReturnToWork):
-        self.workers[event.worker_index].start()
+        event.worker.start()
 
-        if self.monitor_client_list[event.worker_index] is not None:
-            self.dispatch(
-                ClientLeave,
-                self.monitor_client_list[event.worker_index],
-                worker_index=event.worker_index
-            )
+        if (next_client := event.worker.next()):
+            self.dispatch(ClientLeave, next_client, worker=event.worker)
 
     #####################################################################
     # Passive Actions
@@ -249,10 +268,7 @@ class Simulation:
         if not self.waiting_room:
             return
 
-        worker_index = self.workers.index(worker)
-
-        if self.monitor_client_list[worker_index] and \
-                self.monitor_client_list[worker_index + len(self.workers)]:
+        if worker.monitor_full():
             return
 
         clients = [c for c in self.waiting_room if worker.can_help(c)]
@@ -263,24 +279,20 @@ class Simulation:
             client = clients.pop(0)
 
             if not ClientRandomVar.leakage_from_waiting_room(client, self.clock):
+                start_attention = worker.call(client)
 
-                if not self.monitor_client_list[worker_index]:
-                    self.monitor_client_list[worker_index] = client
+                if start_attention:
                     # TODO: Add event to arrive a la fila del monitor
-                    self.dispatch(ClientLeave, client,
-                                  worker_index=worker_index)
+                    self.dispatch(ClientLeave, client, worker=worker)
 
-                elif not self.monitor_client_list[worker_index + len(self.workers)]:
-                    self.monitor_client_list[worker_index +
-                                             len(self.workers)] = client
-
-                else:
-                    break
             else:
                 client.leakage_time = self.clock
 
             self.waiting_room.remove(client)
             free_new_space = True
+
+            if worker.monitor_full():
+                break
 
         if free_new_space:
             self.dispatch(FeeSpaceInWaitingRoomEvent)
@@ -302,6 +314,7 @@ class Simulation:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--delay", type=float, default=None)
+    parser.add_argument("--q_len", type=int, default=2)
 
     args = parser.parse_args()
 
@@ -309,9 +322,9 @@ if __name__ == "__main__":
         waiting_room_size=20,
         totem=Totem(),
         workers=[
-            Seller(12),
-            ClientSupport(12.5),
-            Seller(13),
-            ClientSupport(13.5)
+            Seller(12, queue_len=args.q_len),
+            ClientSupport(12.5, queue_len=args.q_len),
+            Seller(13, queue_len=args.q_len),
+            ClientSupport(13.5, queue_len=args.q_len)
         ]
-    ).start().run(args.delay, verbose=True)
+    ).start().run(args.delay, verbose=True, testing=True)
